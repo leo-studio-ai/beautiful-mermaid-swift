@@ -1,0 +1,26 @@
+{
+  "shortcut": {
+    "standard": "graph LR; A-->B; B-->C; A<-->|shortcut|C; C-->D;",
+    "extended": "graph LR; A-->B; B-->C; A<---->|shortcut|C; C-->D;",
+    "source": "A",
+    "target": "C",
+    "axis": "x",
+    "edgeCount": 4
+  },
+  "cycle": {
+    "standard": "graph TD; A-->B; B-->C; C-->|feedback|A;",
+    "extended": "graph TD; A---->B; B-->C; C-->|feedback|A;",
+    "source": "A",
+    "target": "B",
+    "axis": "y",
+    "edgeCount": 3
+  },
+  "localDirection": {
+    "standard": "graph TD\nsubgraph Local\n  direction LR\n  A-.->B\nend",
+    "extended": "graph TD\nsubgraph Local\n  direction LR\n  A-...->B\nend",
+    "source": "A",
+    "target": "B",
+    "axis": "x",
+    "edgeCount": 1
+  }
+}

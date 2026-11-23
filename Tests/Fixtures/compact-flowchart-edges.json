@@ -1,0 +1,405 @@
+[
+  {
+    "name": "compact chain",
+    "source": "graph TD; Sidebar-->Panel; Panel-->Surface;",
+    "nodes": [
+      {"id": "Sidebar", "label": "Sidebar", "shape": "rectangle"},
+      {"id": "Panel", "label": "Panel", "shape": "rectangle"},
+      {"id": "Surface", "label": "Surface", "shape": "rectangle"}
+    ],
+    "edges": [
+      {"source": "Sidebar", "target": "Panel", "label": "", "style": "solid", "arrowStart": false, "arrowEnd": true, "minimumRankSpan": 1},
+      {"source": "Panel", "target": "Surface", "label": "", "style": "solid", "arrowStart": false, "arrowEnd": true, "minimumRankSpan": 1}
+    ]
+  },
+  {
+    "name": "compact solid arrow",
+    "source": "graph LR; left-node-->right-node;",
+    "nodes": [
+      {"id": "left-node", "label": "left-node", "shape": "rectangle"},
+      {"id": "right-node", "label": "right-node", "shape": "rectangle"}
+    ],
+    "edges": [
+      {"source": "left-node", "target": "right-node", "label": "", "style": "solid", "arrowStart": false, "arrowEnd": true, "minimumRankSpan": 1}
+    ]
+  },
+  {
+    "name": "compact open link",
+    "source": "graph LR; left-node---right-node;",
+    "nodes": [
+      {"id": "left-node", "label": "left-node", "shape": "rectangle"},
+      {"id": "right-node", "label": "right-node", "shape": "rectangle"}
+    ],
+    "edges": [
+      {"source": "left-node", "target": "right-node", "label": "", "style": "solid", "arrowStart": false, "arrowEnd": false, "minimumRankSpan": 1}
+    ]
+  },
+  {
+    "name": "compact dotted arrow",
+    "source": "graph LR; left-node-.->right-node;",
+    "nodes": [
+      {"id": "left-node", "label": "left-node", "shape": "rectangle"},
+      {"id": "right-node", "label": "right-node", "shape": "rectangle"}
+    ],
+    "edges": [
+      {"source": "left-node", "target": "right-node", "label": "", "style": "dotted", "arrowStart": false, "arrowEnd": true, "minimumRankSpan": 1}
+    ]
+  },
+  {
+    "name": "compact thick arrow",
+    "source": "graph LR; left-node==>right-node;",
+    "nodes": [
+      {"id": "left-node", "label": "left-node", "shape": "rectangle"},
+      {"id": "right-node", "label": "right-node", "shape": "rectangle"}
+    ],
+    "edges": [
+      {"source": "left-node", "target": "right-node", "label": "", "style": "thick", "arrowStart": false, "arrowEnd": true, "minimumRankSpan": 1}
+    ]
+  },
+  {
+    "name": "compact bidirectional arrow",
+    "source": "graph LR; left-node<-->right-node;",
+    "nodes": [
+      {"id": "left-node", "label": "left-node", "shape": "rectangle"},
+      {"id": "right-node", "label": "right-node", "shape": "rectangle"}
+    ],
+    "edges": [
+      {"source": "left-node", "target": "right-node", "label": "", "style": "solid", "arrowStart": true, "arrowEnd": true, "minimumRankSpan": 1}
+    ]
+  },
+  {
+    "name": "labeled edges and shaped targets",
+    "source": "graph LR\n  left-node-->middle[Middle]-- label -->right-node>Right]\n  plain---leaf[Leaf]\n  leaf-.->|dotted|left-node",
+    "nodes": [
+      {"id": "left-node", "label": "left-node", "shape": "rectangle"},
+      {"id": "middle", "label": "Middle", "shape": "rectangle"},
+      {"id": "right-node", "label": "Right", "shape": "asymmetric"},
+      {"id": "plain", "label": "plain", "shape": "rectangle"},
+      {"id": "leaf", "label": "Leaf", "shape": "rectangle"}
+    ],
+    "edges": [
+      {"source": "left-node", "target": "middle", "label": "", "style": "solid", "arrowStart": false, "arrowEnd": true, "minimumRankSpan": 1},
+      {"source": "middle", "target": "right-node", "label": "label", "style": "solid", "arrowStart": false, "arrowEnd": true, "minimumRankSpan": 1},
+      {"source": "plain", "target": "leaf", "label": "", "style": "solid", "arrowStart": false, "arrowEnd": false, "minimumRankSpan": 1},
+      {"source": "leaf", "target": "left-node", "label": "dotted", "style": "dotted", "arrowStart": false, "arrowEnd": true, "minimumRankSpan": 1}
+    ]
+  },
+  {
+    "name": "text label after bare node",
+    "source": "graph LR; left-node-- label -->right-node;",
+    "nodes": [
+      {"id": "left-node", "label": "left-node", "shape": "rectangle"},
+      {"id": "right-node", "label": "right-node", "shape": "rectangle"}
+    ],
+    "edges": [
+      {"source": "left-node", "target": "right-node", "label": "label", "style": "solid", "arrowStart": false, "arrowEnd": true, "minimumRankSpan": 1}
+    ]
+  },
+  {
+    "name": "double hyphen opens a compact edge label",
+    "source": "graph LR; left--node-->right-node;",
+    "nodes": [
+      {"id": "left", "label": "left", "shape": "rectangle"},
+      {"id": "right-node", "label": "right-node", "shape": "rectangle"}
+    ],
+    "edges": [
+      {"source": "left", "target": "right-node", "label": "node", "style": "solid", "arrowStart": false, "arrowEnd": true, "minimumRankSpan": 1}
+    ]
+  },
+  {
+    "name": "double hyphen opens a spaced edge label",
+    "source": "graph LR; left--node --> right-node;",
+    "nodes": [
+      {"id": "left", "label": "left", "shape": "rectangle"},
+      {"id": "right-node", "label": "right-node", "shape": "rectangle"}
+    ],
+    "edges": [
+      {"source": "left", "target": "right-node", "label": "node", "style": "solid", "arrowStart": false, "arrowEnd": true, "minimumRankSpan": 1}
+    ]
+  },
+  {
+    "name": "reject an unfinished edge label",
+    "source": "graph LR; left--node;",
+    "rejected": true
+  },
+  {
+    "name": "reject a trailing double hyphen",
+    "source": "graph LR; trailing--;",
+    "rejected": true
+  },
+  {
+    "name": "reject a second double hyphen in an unfinished label",
+    "source": "graph LR; left--node-- label -->right-node;",
+    "rejected": true
+  },
+  {
+    "name": "reject an arrow without a target",
+    "source": "graph LR; A-->;",
+    "rejected": true
+  },
+  {
+    "name": "reject an open link without a target",
+    "source": "graph LR; A---;",
+    "rejected": true
+  },
+  {
+    "name": "long solid arrow",
+    "source": "graph LR; A--->B;",
+    "nodes": [
+      {"id": "A", "label": "A", "shape": "rectangle"},
+      {"id": "B", "label": "B", "shape": "rectangle"}
+    ],
+    "edges": [
+      {"source": "A", "target": "B", "label": "", "style": "solid", "arrowStart": false, "arrowEnd": true, "minimumRankSpan": 2}
+    ]
+  },
+  {
+    "name": "long open link",
+    "source": "graph LR; C----D;",
+    "nodes": [
+      {"id": "C", "label": "C", "shape": "rectangle"},
+      {"id": "D", "label": "D", "shape": "rectangle"}
+    ],
+    "edges": [
+      {"source": "C", "target": "D", "label": "", "style": "solid", "arrowStart": false, "arrowEnd": false, "minimumRankSpan": 2}
+    ]
+  },
+  {
+    "name": "solid links can span more than two ranks",
+    "source": "graph LR; A----->B;",
+    "nodes": [
+      {"id": "A", "label": "A", "shape": "rectangle"},
+      {"id": "B", "label": "B", "shape": "rectangle"}
+    ],
+    "edges": [
+      {"source": "A", "target": "B", "label": "", "style": "solid", "arrowStart": false, "arrowEnd": true, "minimumRankSpan": 4}
+    ]
+  },
+  {
+    "name": "long bidirectional arrow",
+    "source": "graph LR; A<--->B;",
+    "nodes": [
+      {"id": "A", "label": "A", "shape": "rectangle"},
+      {"id": "B", "label": "B", "shape": "rectangle"}
+    ],
+    "edges": [
+      {"source": "A", "target": "B", "label": "", "style": "solid", "arrowStart": true, "arrowEnd": true, "minimumRankSpan": 2}
+    ]
+  },
+  {
+    "name": "long dotted arrow",
+    "source": "graph LR; A-..->B;",
+    "nodes": [
+      {"id": "A", "label": "A", "shape": "rectangle"},
+      {"id": "B", "label": "B", "shape": "rectangle"}
+    ],
+    "edges": [
+      {"source": "A", "target": "B", "label": "", "style": "dotted", "arrowStart": false, "arrowEnd": true, "minimumRankSpan": 2}
+    ]
+  },
+  {
+    "name": "long dotted open link",
+    "source": "graph LR; A-..-B;",
+    "nodes": [
+      {"id": "A", "label": "A", "shape": "rectangle"},
+      {"id": "B", "label": "B", "shape": "rectangle"}
+    ],
+    "edges": [
+      {"source": "A", "target": "B", "label": "", "style": "dotted", "arrowStart": false, "arrowEnd": false, "minimumRankSpan": 2}
+    ]
+  },
+  {
+    "name": "long dotted arrow with embedded label",
+    "source": "graph LR; A-. label ..->B;",
+    "nodes": [
+      {"id": "A", "label": "A", "shape": "rectangle"},
+      {"id": "B", "label": "B", "shape": "rectangle"}
+    ],
+    "edges": [
+      {"source": "A", "target": "B", "label": "label", "style": "dotted", "arrowStart": false, "arrowEnd": true, "minimumRankSpan": 2}
+    ]
+  },
+  {
+    "name": "long dotted arrow with compact embedded label",
+    "source": "graph LR; A-.label..->B;",
+    "nodes": [
+      {"id": "A", "label": "A", "shape": "rectangle"},
+      {"id": "B", "label": "B", "shape": "rectangle"}
+    ],
+    "edges": [
+      {"source": "A", "target": "B", "label": "label", "style": "dotted", "arrowStart": false, "arrowEnd": true, "minimumRankSpan": 2}
+    ]
+  },
+  {
+    "name": "long solid arrow with embedded label",
+    "source": "graph LR; A-- label ---->B;",
+    "nodes": [
+      {"id": "A", "label": "A", "shape": "rectangle"},
+      {"id": "B", "label": "B", "shape": "rectangle"}
+    ],
+    "edges": [
+      {"source": "A", "target": "B", "label": "label", "style": "solid", "arrowStart": false, "arrowEnd": true, "minimumRankSpan": 3}
+    ]
+  },
+  {
+    "name": "long solid arrow with compact embedded label",
+    "source": "graph LR; A--label--->B;",
+    "nodes": [
+      {"id": "A", "label": "A", "shape": "rectangle"},
+      {"id": "B", "label": "B", "shape": "rectangle"}
+    ],
+    "edges": [
+      {"source": "A", "target": "B", "label": "label", "style": "solid", "arrowStart": false, "arrowEnd": true, "minimumRankSpan": 2}
+    ]
+  },
+  {
+    "name": "single hyphen within an embedded label",
+    "source": "graph LR; A-- foo-bar -->B;",
+    "nodes": [
+      {"id": "A", "label": "A", "shape": "rectangle"},
+      {"id": "B", "label": "B", "shape": "rectangle"}
+    ],
+    "edges": [
+      {"source": "A", "target": "B", "label": "foo-bar", "style": "solid", "arrowStart": false, "arrowEnd": true, "minimumRankSpan": 1}
+    ]
+  },
+  {
+    "name": "reject embedded label containing an unclosed operator",
+    "source": "graph LR; A-- wrapped -- words -->B;",
+    "rejected": true
+  },
+  {
+    "name": "long thick arrow with embedded label",
+    "source": "graph LR; A==label===>B;",
+    "nodes": [
+      {"id": "A", "label": "A", "shape": "rectangle"},
+      {"id": "B", "label": "B", "shape": "rectangle"}
+    ],
+    "edges": [
+      {"source": "A", "target": "B", "label": "label", "style": "thick", "arrowStart": false, "arrowEnd": true, "minimumRankSpan": 2}
+    ]
+  },
+  {
+    "name": "long thick bidirectional arrow",
+    "source": "graph LR; A<===>B;",
+    "nodes": [
+      {"id": "A", "label": "A", "shape": "rectangle"},
+      {"id": "B", "label": "B", "shape": "rectangle"}
+    ],
+    "edges": [
+      {"source": "A", "target": "B", "label": "", "style": "thick", "arrowStart": true, "arrowEnd": true, "minimumRankSpan": 2}
+    ]
+  },
+  {
+    "name": "long thick open link",
+    "source": "graph LR; A====B;",
+    "nodes": [
+      {"id": "A", "label": "A", "shape": "rectangle"},
+      {"id": "B", "label": "B", "shape": "rectangle"}
+    ],
+    "edges": [
+      {"source": "A", "target": "B", "label": "", "style": "thick", "arrowStart": false, "arrowEnd": false, "minimumRankSpan": 2}
+    ]
+  },
+  {
+    "name": "single hyphen starts an ID",
+    "source": "graph LR; A-->-B;",
+    "nodes": [
+      {"id": "A", "label": "A", "shape": "rectangle"},
+      {"id": "-B", "label": "-B", "shape": "rectangle"}
+    ],
+    "edges": [
+      {"source": "A", "target": "-B", "label": "", "style": "solid", "arrowStart": false, "arrowEnd": true, "minimumRankSpan": 1}
+    ]
+  },
+  {
+    "name": "single hyphen ends an ID",
+    "source": "graph LR; A-;",
+    "nodes": [
+      {"id": "A-", "label": "A-", "shape": "rectangle"}
+    ],
+    "edges": [
+    ]
+  },
+  {
+    "name": "open link to a shaped node",
+    "source": "graph LR; A---B[Target];",
+    "nodes": [
+      {"id": "A", "label": "A", "shape": "rectangle"},
+      {"id": "B", "label": "Target", "shape": "rectangle"}
+    ],
+    "edges": [
+      {"source": "A", "target": "B", "label": "", "style": "solid", "arrowStart": false, "arrowEnd": false, "minimumRankSpan": 1}
+    ]
+  },
+  {
+    "name": "left angle before an open link",
+    "source": "graph LR; A<---B;",
+    "nodes": [
+      {"id": "A", "label": "A", "shape": "rectangle"},
+      {"id": "B", "label": "B", "shape": "rectangle"}
+    ],
+    "edges": [
+      {"source": "A", "target": "B", "label": "", "style": "solid", "arrowStart": false, "arrowEnd": false, "minimumRankSpan": 2}
+    ]
+  },
+  {
+    "name": "bidirectional marker after an embedded label",
+    "source": "graph LR; A-- foo<--->B;",
+    "nodes": [
+      {"id": "A", "label": "A", "shape": "rectangle"},
+      {"id": "B", "label": "B", "shape": "rectangle"}
+    ],
+    "edges": [
+      {"source": "A", "target": "B", "label": "foo", "style": "solid", "arrowStart": true, "arrowEnd": true, "minimumRankSpan": 2}
+    ]
+  },
+  {
+    "name": "compact label ending with a reserved marker",
+    "source": "graph LR; A--foo---B;",
+    "nodes": [
+      {"id": "A", "label": "A", "shape": "rectangle"},
+      {"id": "B", "label": "B", "shape": "rectangle"}
+    ],
+    "edges": [
+      {"source": "A", "target": "B", "label": "fo", "style": "solid", "arrowStart": false, "arrowEnd": false, "minimumRankSpan": 2}
+    ]
+  },
+  {
+    "name": "quoted label contains double hyphens",
+    "source": "graph LR; A-- \"open -- close\" -->B;",
+    "nodes": [
+      {"id": "A", "label": "A", "shape": "rectangle"},
+      {"id": "B", "label": "B", "shape": "rectangle"}
+    ],
+    "edges": [
+      {"source": "A", "target": "B", "label": "open -- close", "style": "solid", "arrowStart": false, "arrowEnd": true, "minimumRankSpan": 1}
+    ]
+  },
+  {
+    "name": "reject an empty unquoted embedded label",
+    "source": "graph LR; A-- -->B;",
+    "rejected": true
+  },
+  {
+    "name": "cap the requested link span at ten ranks",
+    "source": "graph LR; A-------------->B;",
+    "nodes": [
+      {"id": "A", "label": "A", "shape": "rectangle"},
+      {"id": "B", "label": "B", "shape": "rectangle"}
+    ],
+    "edges": [
+      {"source": "A", "target": "B", "label": "", "style": "solid", "arrowStart": false, "arrowEnd": true, "minimumRankSpan": 10}
+    ]
+  },
+  {
+    "name": "reject an unfinished pipe label",
+    "source": "graph LR; A ---|unfinished B;",
+    "rejected": true
+  },
+  {
+    "name": "reject a dangling target group",
+    "source": "graph LR; A -->B &;",
+    "rejected": true
+  }
+]
