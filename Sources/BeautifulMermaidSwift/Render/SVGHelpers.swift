@@ -83,37 +83,48 @@ func _resolveSvgCssVariables(_ svg: String) -> String {
         vars[name] = value
     }
 
-    guard let varRegex = try? NSRegularExpression(
-        pattern: #"var\(\s*--([a-zA-Z0-9_-]+)\s*(?:,\s*([^)]+))?\)"#
-    ) else {
-        return svg
-    }
-
-    func resolveVars(in input: String) -> String {
-        var out = input
-        for _ in 0..<16 {
-            let source = out as NSString
-            let range = NSRange(location: 0, length: source.length)
-            let varMatches = varRegex.matches(in: out, range: range)
-            if varMatches.isEmpty { break }
-
-            var changed = false
-            for m in varMatches.reversed() {
-                guard m.numberOfRanges >= 2 else { continue }
-                let key = source.substring(with: m.range(at: 1))
-                let fallback: String? = (m.numberOfRanges >= 3 && m.range(at: 2).location != NSNotFound)
-                    ? source.substring(with: m.range(at: 2)).trimmingCharacters(in: .whitespacesAndNewlines)
-                    : nil
-
-                let replacement = vars[key] ?? fallback ?? ""
-                if !replacement.isEmpty {
-                    out = (out as NSString).replacingCharacters(in: m.range(at: 0), with: replacement)
-                    changed = true
+    // Replaces each `var(--name[, fallback])`, matching parentheses so a fallback
+    // may itself contain `color-mix(...)` or `var(...)`. A defined variable wins over
+    // its fallback; one with neither is left in place for the cleanup passes below.
+    func resolveVars(in input: String, depth: Int = 0) -> String {
+        guard depth < 16 else { return input }
+        var out = ""
+        var rest = Substring(input)
+        while let open = rest.range(of: "var(") {
+            out += rest[..<open.lowerBound]
+            var level = 1
+            var comma: Substring.Index?
+            var close = open.upperBound
+            while close < rest.endIndex {
+                let c = rest[close]
+                if c == "(" {
+                    level += 1
+                } else if c == ")" {
+                    level -= 1
+                    if level == 0 { break }
+                } else if c == ",", level == 1, comma == nil {
+                    comma = close
                 }
+                close = rest.index(after: close)
             }
-            if !changed { break }
+            guard close < rest.endIndex else {
+                out += rest[open.lowerBound...]
+                return out
+            }
+            let name = rest[open.upperBound..<(comma ?? close)]
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = name.hasPrefix("--") ? String(name.dropFirst(2)) : name
+            let fallback = comma.map {
+                rest[rest.index(after: $0)..<close].trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            if let value = vars[key] ?? fallback, !value.isEmpty {
+                out += resolveVars(in: value, depth: depth + 1)
+            } else {
+                out += rest[open.lowerBound...close]
+            }
+            rest = rest[rest.index(after: close)...]
         }
-        return out
+        return out + rest
     }
 
     // First resolve variable definitions themselves.
