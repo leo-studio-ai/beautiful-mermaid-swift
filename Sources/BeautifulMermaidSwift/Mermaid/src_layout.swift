@@ -464,7 +464,8 @@ private func _collectEdgeSegments(
     _ elkNode: [String: Any],
     segments: inout [Int: _EdgeSegments],
     offsetX: Double,
-    offsetY: Double
+    offsetY: Double,
+    reversedEdges: Set<String>
 ) {
     for elkEdge in _asDictArray(elkNode["edges"]) {
         guard let eid = _asString(elkEdge["id"]) else { continue }
@@ -507,6 +508,8 @@ private func _collectEdgeSegments(
                 ))
             }
         }
+
+        if reversedEdges.contains(eid) { points.reverse() }
 
         // Extract label position
         var labelPos: _PositionedPointPayload?
@@ -551,7 +554,7 @@ private func _collectEdgeSegments(
         if !_asDictArray(child["children"]).isEmpty {
             let cx = (_asDouble(child["x"]) ?? 0) + offsetX
             let cy = (_asDouble(child["y"]) ?? 0) + offsetY
-            _collectEdgeSegments(child, segments: &segments, offsetX: cx, offsetY: cy)
+            _collectEdgeSegments(child, segments: &segments, offsetX: cx, offsetY: cy, reversedEdges: reversedEdges)
         }
     }
 }
@@ -1007,7 +1010,8 @@ private func _resolveEdgeStyle(edgeIndex: Int, graph: _ParsedGraph) -> [String: 
 private func _extractPositionedGraph(
     _ source: _ParsedGraph,
     _ laidOut: _ElkNode,
-    diagramType: DiagramType
+    diagramType: DiagramType,
+    reversedEdges: Set<String> = []
 ) -> PositionedGraph {
     let nodeById = Dictionary(source.nodesInOrder.map { ($0.id, $0.node) }, uniquingKeysWith: { _, last in last })
     let graphHeight = _asDouble(laidOut["height"]) ?? 0
@@ -1040,7 +1044,7 @@ private func _extractPositionedGraph(
     // Collect edge segments from all levels (root + subgraphs) with coordinate offsets.
     // Groups segments by original edge index, combining outgoing + external + incoming.
     var segmentsByIndex: [Int: _EdgeSegments] = [:]
-    _collectEdgeSegments(laidOut, segments: &segmentsByIndex, offsetX: 0, offsetY: 0)
+    _collectEdgeSegments(laidOut, segments: &segmentsByIndex, offsetX: 0, offsetY: 0, reversedEdges: reversedEdges)
 
     // Extract subgraph groups — needed for margin routing
     var groups = _extractSubgraphGroups(laidOut, source: source, graphHeight: graphHeight)
@@ -1230,6 +1234,137 @@ public func layoutGraphSync(
     return try _layoutGraphSyncWithConfig(graph, config)
 }
 
+/// ELK's layered engine gives each edge a minimum span of one. Add paths of
+/// zero-size layout nodes to express longer spans while ELK routes the original
+/// edges and positions their labels normally. These paths are layout-only.
+private struct _FlowchartRankConstraints {
+    private let spans: [String: Int]
+    private var usedIDs: Set<String> = []
+    private var nextID = 0
+    private(set) var reversedEdges: Set<String> = []
+
+    init(graph: _ParsedGraph, elkGraph: _ElkNode) {
+        spans = Dictionary(uniqueKeysWithValues: graph.edges.enumerated().compactMap { index, edge in
+            let span = min(edge.minimumRankSpan, 10)
+            return span > 1 ? ("e\(index)", span) : nil
+        })
+        if !spans.isEmpty {
+            collectIDs(elkGraph)
+        }
+    }
+
+    private mutating func collectIDs(_ node: _ElkNode) {
+        for item in [node] + _asDictArray(node["ports"]) + _asDictArray(node["edges"]) {
+            if let id = _asString(item["id"]) {
+                usedIDs.insert(id)
+            }
+        }
+        for child in _asDictArray(node["children"]) {
+            collectIDs(child)
+        }
+    }
+
+    private mutating func makeID() -> String {
+        while true {
+            defer { nextID += 1 }
+            let id = "_mermaid_rank_\(nextID)"
+            if usedIDs.insert(id).inserted { return id }
+        }
+    }
+
+    private func mapChildIDs(_ node: _ElkNode, to anchor: String, in anchors: inout [String: String]) {
+        if let id = _asString(node["id"]) { anchors[id] = anchor }
+        for port in _asDictArray(node["ports"]) {
+            if let id = _asString(port["id"]) { anchors[id] = anchor }
+        }
+        for child in _asDictArray(node["children"]) {
+            mapChildIDs(child, to: anchor, in: &anchors)
+        }
+    }
+
+    /// Reverse DFS finish order keeps all acyclic edges and selects feedback
+    /// edges in model order. Reorient those edges before ELK's cycle breaker
+    /// sees the auxiliary nodes so it cannot break an individual span segment.
+    private func nodeOrder(_ ids: [String], adjacency: [String: [String]]) -> [String: Int] {
+        var seen: Set<String> = []
+        var finished: [String] = []
+        for root in ids where seen.insert(root).inserted {
+            var stack: [(id: String, next: Int)] = [(root, 0)]
+            while let frame = stack.last {
+                let destinations = adjacency[frame.id] ?? []
+                if frame.next == destinations.count {
+                    finished.append(frame.id)
+                    stack.removeLast()
+                } else {
+                    stack[stack.count - 1].next += 1
+                    let id = destinations[frame.next]
+                    if seen.insert(id).inserted { stack.append((id, 0)) }
+                }
+            }
+        }
+        return Dictionary(uniqueKeysWithValues: finished.reversed().enumerated().map { ($1, $0) })
+    }
+
+    mutating func apply(to node: _ElkNode) -> _ElkNode {
+        guard !spans.isEmpty else { return node }
+        var result = node
+        var children = _asDictArray(node["children"]).map { apply(to: $0) }
+        var edges = _asDictArray(node["edges"])
+        result["children"] = children
+        guard edges.contains(where: { spans[_asString($0["id"]) ?? ""] != nil }) else { return result }
+
+        let childIDs = children.compactMap { _asString($0["id"]) }
+        var anchors: [String: String] = [:]
+        for child in children {
+            if let id = _asString(child["id"]) { mapChildIDs(child, to: id, in: &anchors) }
+        }
+        var adjacency: [String: [String]] = [:]
+        for edge in edges {
+            if let source = (edge["sources"] as? [String])?.first.flatMap({ anchors[$0] }),
+               let target = (edge["targets"] as? [String])?.first.flatMap({ anchors[$0] }), source != target {
+                adjacency[source, default: []].append(target)
+            }
+        }
+        let order = nodeOrder(childIDs, adjacency: adjacency)
+        var constraintEdges: [_ElkNode] = []
+        for index in edges.indices {
+            guard let id = _asString(edges[index]["id"]),
+                  var source = (edges[index]["sources"] as? [String])?.first,
+                  var target = (edges[index]["targets"] as? [String])?.first,
+                  source != target else { continue }
+            if let sourceRank = anchors[source].flatMap({ order[$0] }),
+               let targetRank = anchors[target].flatMap({ order[$0] }), sourceRank > targetRank {
+                swap(&source, &target)
+                edges[index]["sources"] = [source]
+                edges[index]["targets"] = [target]
+                reversedEdges.insert(id)
+            }
+            guard let span = spans[id] else { continue }
+            var previous = source
+            for _ in 1..<span {
+                let dummy = makeID()
+                children.append(["id": dummy, "width": 0, "height": 0])
+                constraintEdges.append(["id": makeID(), "sources": [previous], "targets": [dummy]])
+                previous = dummy
+            }
+            constraintEdges.append(["id": makeID(), "sources": [previous], "targets": [target]])
+        }
+        result["children"] = children
+        result["edges"] = edges + constraintEdges
+        return result
+    }
+}
+
+private func _layoutElkGraph(_ input: _ElkNode, parsed: _ParsedGraph, diagramType: DiagramType) throws -> PositionedGraph {
+    guard diagramType == .flowchart else {
+        return _extractPositionedGraph(parsed, try elkLayoutSync(input), diagramType: diagramType)
+    }
+    var constraints = _FlowchartRankConstraints(graph: parsed, elkGraph: input)
+    let rankedInput = constraints.apply(to: input)
+    let laidOut = try elkLayoutSync(rankedInput)
+    return _extractPositionedGraph(parsed, laidOut, diagramType: diagramType, reversedEdges: constraints.reversedEdges)
+}
+
 private func _layoutGraphSyncWithConfig(
     _ graph: MermaidGraph,
     _ config: LayoutConfig
@@ -1250,13 +1385,11 @@ private func _layoutGraphSyncWithConfig(
     _applyLayoutConfig(config, to: &elkGraph)
 
     do {
-        let laidOut = try elkLayoutSync(elkGraph)
-        return _extractPositionedGraph(parsed, laidOut, diagramType: graph.type)
+        return try _layoutElkGraph(elkGraph, parsed: parsed, diagramType: graph.type)
     } catch {
         var flatGraph = _buildFlatElkGraph(parsed)
         _applyLayoutConfig(config, to: &flatGraph)
-        let laidOut = try elkLayoutSync(flatGraph)
-        return _extractPositionedGraph(parsed, laidOut, diagramType: graph.type)
+        return try _layoutElkGraph(flatGraph, parsed: parsed, diagramType: graph.type)
     }
 }
 
@@ -1506,19 +1639,16 @@ private func _layoutGraphSyncFromLayoutEngine(
             elkGraph = _buildElkGraphNoCrossEdges(parsed)
         }
         do {
-            let laidOut = try elkLayoutSync(elkGraph)
-            return _extractPositionedGraph(parsed, laidOut, diagramType: graph.type)
+            return try _layoutElkGraph(elkGraph, parsed: parsed, diagramType: graph.type)
         } catch {
             // Fallback: fully flat layout
             let flatGraph = _buildFlatElkGraph(parsed)
-            let laidOut = try elkLayoutSync(flatGraph)
-            return _extractPositionedGraph(parsed, laidOut, diagramType: graph.type)
+            return try _layoutElkGraph(flatGraph, parsed: parsed, diagramType: graph.type)
         }
     }
     // No subgraphs — use the standard flat graph builder
     let elkGraph = _buildElkGraph(parsed)
-    let laidOut = try elkLayoutSync(elkGraph)
-    return _extractPositionedGraph(parsed, laidOut, diagramType: graph.type)
+    return try _layoutElkGraph(elkGraph, parsed: parsed, diagramType: graph.type)
 }
 
 private func _layoutGraphWithDiagnosticsSyncFromLayoutEngine(

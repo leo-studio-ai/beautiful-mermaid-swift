@@ -10,9 +10,24 @@ private typealias ParsedEdge = original_src_types.MermaidEdge
 private typealias ParsedSubgraph = original_src_types.MermaidSubgraph
 private typealias ParsedGraph = original_src_types.MermaidGraph
 
-private enum _ParserEntryError: Error {
+private enum _ParserEntryError: LocalizedError {
     case emptyDiagram
     case invalidHeader(String)
+    case invalidFlowchartLink(String)
+    case unsupportedFlowchartLink(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .emptyDiagram:
+            return "The Mermaid diagram is empty."
+        case .invalidHeader(let header):
+            return "Invalid Mermaid diagram header: \(header)"
+        case .invalidFlowchartLink(let text):
+            return "Invalid or incomplete flowchart link: \(text)"
+        case .unsupportedFlowchartLink(let text):
+            return "Unsupported flowchart link: \(text)"
+        }
+    }
 }
 
 private struct _WorkingGraph {
@@ -79,15 +94,22 @@ private func _regex(_ pattern: String) -> NSRegularExpression {
     return regex
 }
 
-private let _arrowRegex = _regex(#"^(<)?(-->|-.->|==>|---|-\.-|===)(?:\|([^|]*)\|)?"#)
-
-/// Text-embedded label regex — matches "-- label -->", "-. label .->", "== label ==>" syntax.
-/// Group 1: optional `<` for bidirectional
-/// Group 2: opening prefix (`--`, `-.`, `==`)
-/// Group 3: label text
-/// Group 4: closing arrow/line (`-->`, `---`, `.->`, `-.-`, `==>`, `===`)
-private let _textEmbeddedArrowRegex = _regex(#"^(<)?(--|-\.|==)\s+(.+?)\s+(-->|---|\.\->|-\.\-|==>|===)"#)
-private let _bareNodeRegex = _regex(#"^([\w-]+)"#)
+private let _solidLink = #"-{2,}[>xo-]"#
+private let _thickLink = #"={2,}[>xo=]"#
+private let _dottedLinkEnd = #"\.+-[>xo]?"#
+private let _arrowRegex = _regex(
+    #"^([<xo])?(\#(_solidLink)|\#(_thickLink)|-\#(_dottedLinkEnd))(?:\s*\|([^|]*)\|)?"#
+)
+private let _textEmbeddedArrowRegexes = [
+    ("--", #"(?:[^"-]|-(?!-))+?"#, _solidLink),
+    ("==", #"(?:[^"=]|=(?!=))+?"#, _thickLink),
+    (#"-\."#, #"[^"]+?"#, #"-?\#(_dottedLinkEnd)"#),
+].map { opening, label, closing in
+    _regex(#"^([<xo])?\#(opening)\s*("[^"]*"|\#(label))\s*([<xo])?(\#(closing))"#)
+}
+private let _flowchartLinkStartRegex = _regex(#"^(?:[<xo])?(?:--|==|-\.)"#)
+// A single hyphen can be part of an ID. Double hyphens and hyphen-dot begin links.
+private let _bareNodeRegex = _regex(#"^((?:\w|-(?![-.]))+)"#)
 private let _classShorthandRegex = _regex(#"^:::([\w][\w-]*)"#)
 
 private let _nodePatterns: [(regex: NSRegularExpression, shape: ParsedNodeShape)] = [
@@ -271,7 +293,7 @@ private func _parseFlowchart(_ lines: [String]) throws -> ParsedGraph {
             continue
         }
 
-        _parseEdgeLine(line, graph: &graph, subgraphStack: &subgraphStack)
+        try _parseEdgeLine(line, graph: &graph, subgraphStack: &subgraphStack)
     }
 
     return graph.toParsedGraph()
@@ -447,53 +469,95 @@ private func _parseStyleProps(_ propsStr: String) -> [String: String] {
     return props
 }
 
-private func _parseEdgeLine(_ line: String, graph: inout _WorkingGraph, subgraphStack: inout [ParsedSubgraph]) {
-    var remaining = line.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard let firstGroup = _consumeNodeGroup(remaining, graph: &graph, subgraphStack: &subgraphStack), !firstGroup.ids.isEmpty else {
+private struct _FlowchartLink {
+    let remaining: String
+    let label: String?
+    let style: ParsedEdgeStyle
+    let hasArrowStart: Bool
+    let hasArrowEnd: Bool
+    let minimumRankSpan: Int
+}
+
+private func _consumeFlowchartLink(_ text: String) throws -> _FlowchartLink? {
+    let full: String
+    let openingMarker: String
+    let closingMarker: String
+    let op: String
+    let label: String?
+    if let match = _regexMatch(_arrowRegex, text) {
+        full = match[0]
+        openingMarker = ""
+        closingMarker = match[1]
+        op = match[2]
+        label = match[3]
+    } else if let match = _textEmbeddedArrowRegexes.lazy.compactMap({ _regexMatch($0, text) }).first {
+        full = match[0]
+        openingMarker = match[1]
+        closingMarker = match[3]
+        op = match[4]
+        let embeddedLabel = match[2].trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !embeddedLabel.isEmpty else {
+            throw _ParserEntryError.invalidFlowchartLink(full)
+        }
+        label = embeddedLabel
+    } else if text.hasPrefix("~~~") {
+        throw _ParserEntryError.unsupportedFlowchartLink(text)
+    } else if _regexMatch(_flowchartLinkStartRegex, text) != nil {
+        throw _ParserEntryError.invalidFlowchartLink(text)
+    } else {
+        return nil
+    }
+
+    let hasArrowEnd = op.hasSuffix(">")
+    let closingHasArrowStart = closingMarker == "<" && hasArrowEnd
+    if op.hasSuffix("o") || op.hasSuffix("x") || openingMarker == "o" || openingMarker == "x" {
+        throw _ParserEntryError.unsupportedFlowchartLink(full)
+    }
+    if openingMarker == "<" && (!hasArrowEnd || closingHasArrowStart) {
+        throw _ParserEntryError.invalidFlowchartLink(full)
+    }
+
+    let style: ParsedEdgeStyle
+    let minimumRankSpan: Int
+    if op.contains(".") {
+        style = .dotted
+        minimumRankSpan = op.filter { $0 == "." }.count
+    } else {
+        let linePrefix = closingHasArrowStart ? "" : closingMarker
+        style = (linePrefix + op).hasPrefix("=") ? .thick : .solid
+        minimumRankSpan = linePrefix.count + op.count - 2
+    }
+
+    var trimmedLabel = label?.trimmingCharacters(in: .whitespacesAndNewlines)
+    if let quoted = trimmedLabel, quoted.hasPrefix("\""), quoted.hasSuffix("\"") {
+        trimmedLabel = String(quoted.dropFirst().dropLast())
+    }
+    return _FlowchartLink(
+        remaining: String(text.dropFirst(full.count)).trimmingCharacters(in: .whitespacesAndNewlines),
+        label: trimmedLabel.flatMap { $0.isEmpty ? nil : original_src_multiline_utils.normalizeBrTags($0) },
+        style: style,
+        hasArrowStart: openingMarker == "<" || closingHasArrowStart,
+        hasArrowEnd: hasArrowEnd,
+        // Mermaid caps the rank span at ten.
+        minimumRankSpan: min(minimumRankSpan, 10)
+    )
+}
+
+private func _parseEdgeLine(_ line: String, graph: inout _WorkingGraph, subgraphStack: inout [ParsedSubgraph]) throws {
+    guard let firstGroup = try _consumeNodeGroup(line, graph: &graph, subgraphStack: &subgraphStack) else {
+        if _regexMatch(_flowchartLinkStartRegex, line) != nil {
+            throw _ParserEntryError.invalidFlowchartLink(line)
+        }
         return
     }
 
-    remaining = firstGroup.remaining.trimmingCharacters(in: .whitespacesAndNewlines)
+    var remaining = firstGroup.remaining
     var prevGroupIds = firstGroup.ids
 
-    while !remaining.isEmpty {
-        var hasArrowStart = false
-        var edgeLabel: String?
-        var style: ParsedEdgeStyle
-        var hasArrowEnd: Bool
-
-        if let arrowMatch = _regexMatch(_arrowRegex, remaining),
-           let full = arrowMatch[safe: 0],
-           let op = arrowMatch[safe: 2]
-        {
-            hasArrowStart = !(arrowMatch[safe: 1] ?? "").isEmpty
-            let rawLabel = arrowMatch[safe: 3]?.trimmingCharacters(in: .whitespacesAndNewlines)
-            edgeLabel = (rawLabel?.isEmpty == false) ? original_src_multiline_utils.normalizeBrTags(rawLabel!) : nil
-            remaining = String(remaining.dropFirst(full.count)).trimmingCharacters(in: .whitespacesAndNewlines)
-            style = _arrowStyleFromOp(op)
-            hasArrowEnd = op.hasSuffix(">")
-        } else if let teMatch = _regexMatch(_textEmbeddedArrowRegex, remaining),
-                  let full = teMatch[safe: 0],
-                  let openOp = teMatch[safe: 2],
-                  let labelText = teMatch[safe: 3],
-                  let closeOp = teMatch[safe: 4]
-        {
-            // Fallback: text-embedded label syntax (-- Yes -->, -. Maybe .->, == Sure ==>)
-            hasArrowStart = !(teMatch[safe: 1] ?? "").isEmpty
-            let trimmedLabel = labelText.trimmingCharacters(in: .whitespacesAndNewlines)
-            edgeLabel = trimmedLabel.isEmpty ? nil : original_src_multiline_utils.normalizeBrTags(trimmedLabel)
-            remaining = String(remaining.dropFirst(full.count)).trimmingCharacters(in: .whitespacesAndNewlines)
-            style = _textArrowStyleFromOps(openOp, closeOp)
-            hasArrowEnd = closeOp.hasSuffix(">")
-        } else {
-            break
+    while let link = try _consumeFlowchartLink(remaining) {
+        guard let nextGroup = try _consumeNodeGroup(link.remaining, graph: &graph, subgraphStack: &subgraphStack) else {
+            throw _ParserEntryError.invalidFlowchartLink(line)
         }
-
-        guard let nextGroup = _consumeNodeGroup(remaining, graph: &graph, subgraphStack: &subgraphStack), !nextGroup.ids.isEmpty else {
-            break
-        }
-
-        remaining = nextGroup.remaining.trimmingCharacters(in: .whitespacesAndNewlines)
 
         for sourceId in prevGroupIds {
             for targetId in nextGroup.ids {
@@ -501,20 +565,22 @@ private func _parseEdgeLine(_ line: String, graph: inout _WorkingGraph, subgraph
                     ParsedEdge(
                         source: sourceId,
                         target: targetId,
-                        label: edgeLabel,
-                        style: style,
-                        hasArrowStart: hasArrowStart,
-                        hasArrowEnd: hasArrowEnd
+                        label: link.label,
+                        style: link.style,
+                        hasArrowStart: link.hasArrowStart,
+                        hasArrowEnd: link.hasArrowEnd,
+                        minimumRankSpan: link.minimumRankSpan
                     )
                 )
             }
         }
 
         prevGroupIds = nextGroup.ids
+        remaining = nextGroup.remaining
     }
 }
 
-private func _consumeNodeGroup(_ text: String, graph: inout _WorkingGraph, subgraphStack: inout [ParsedSubgraph]) -> _ConsumedNodeGroup? {
+private func _consumeNodeGroup(_ text: String, graph: inout _WorkingGraph, subgraphStack: inout [ParsedSubgraph]) throws -> _ConsumedNodeGroup? {
     guard let first = _consumeNode(text, graph: &graph, subgraphStack: &subgraphStack) else {
         return nil
     }
@@ -525,7 +591,7 @@ private func _consumeNodeGroup(_ text: String, graph: inout _WorkingGraph, subgr
     while remaining.hasPrefix("&") {
         remaining = String(remaining.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines)
         guard let next = _consumeNode(remaining, graph: &graph, subgraphStack: &subgraphStack) else {
-            break
+            throw _ParserEntryError.invalidFlowchartLink(text)
         }
         ids.append(next.id)
         remaining = next.remaining.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -535,39 +601,30 @@ private func _consumeNodeGroup(_ text: String, graph: inout _WorkingGraph, subgr
 }
 
 private func _consumeNode(_ text: String, graph: inout _WorkingGraph, subgraphStack: inout [ParsedSubgraph]) -> _ConsumedNode? {
-    var id: String?
-    var remaining = text
+    guard let nodeId = _regexMatch(_bareNodeRegex, text)?[safe: 1] else {
+        return nil
+    }
+    var remaining = String(text.dropFirst(nodeId.count))
+    var hasExplicitShape = false
 
     for pattern in _nodePatterns {
         guard let match = _regexMatch(pattern.regex, text),
               let full = match[safe: 0],
-              let matchedId = match[safe: 1],
+              match[safe: 1] == nodeId,
               let rawLabel = match[safe: 2]
         else {
             continue
         }
 
         let label = original_src_multiline_utils.normalizeBrTags(rawLabel)
-        _registerNode(&graph, &subgraphStack, ParsedNode(id: matchedId, label: label, shape: pattern.shape))
-        id = matchedId
+        _registerNode(&graph, &subgraphStack, ParsedNode(id: nodeId, label: label, shape: pattern.shape))
         remaining = String(text.dropFirst(full.count))
+        hasExplicitShape = true
         break
     }
 
-    if id == nil,
-       let bare = _regexMatch(_bareNodeRegex, text),
-       let full = bare[safe: 0],
-       let bareId = bare[safe: 1]
-    {
-        id = bareId
-        if graph.nodesById[bareId] == nil && !graph.subgraphIds.contains(bareId) {
-            _registerNode(&graph, &subgraphStack, ParsedNode(id: bareId, label: bareId, shape: .rectangle))
-        }
-        remaining = String(text.dropFirst(full.count))
-    }
-
-    guard let nodeId = id else {
-        return nil
+    if !hasExplicitShape && graph.nodesById[nodeId] == nil && !graph.subgraphIds.contains(nodeId) {
+        _registerNode(&graph, &subgraphStack, ParsedNode(id: nodeId, label: nodeId, shape: .rectangle))
     }
 
     if let classMatch = _regexMatch(_classShorthandRegex, remaining),
@@ -596,22 +653,6 @@ private func _trackInSubgraph(_ subgraphStack: inout [ParsedSubgraph], _ nodeId:
             current.nodeIds.append(nodeId)
         }
     }
-}
-
-private func _textArrowStyleFromOps(_ openOp: String, _ closeOp: String) -> ParsedEdgeStyle {
-    if openOp == "-." || closeOp == ".->" || closeOp == "-.-" { return .dotted }
-    if openOp == "==" || closeOp == "==>" || closeOp == "===" { return .thick }
-    return .solid
-}
-
-private func _arrowStyleFromOp(_ op: String) -> ParsedEdgeStyle {
-    if op == "-.->" || op == "-.-" {
-        return .dotted
-    }
-    if op == "==>" || op == "===" {
-        return .thick
-    }
-    return .solid
 }
 
 private func _parseDirection(_ token: String) -> ParsedDirection? {

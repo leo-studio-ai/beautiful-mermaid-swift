@@ -68,6 +68,8 @@ open class original_src_types {
         public var hasArrowStart: Bool
         public var hasArrowEnd: Bool
         public var inlineStyle: [String: String]?
+        /// Minimum number of ranks requested by the flowchart link operator.
+        public var minimumRankSpan: Int
 
         public init(
             source: String,
@@ -76,7 +78,8 @@ open class original_src_types {
             style: EdgeStyle,
             hasArrowStart: Bool,
             hasArrowEnd: Bool,
-            inlineStyle: [String: String]? = nil
+            inlineStyle: [String: String]? = nil,
+            minimumRankSpan: Int = 1
         ) {
             self.source = source
             self.target = target
@@ -85,6 +88,7 @@ open class original_src_types {
             self.hasArrowStart = hasArrowStart
             self.hasArrowEnd = hasArrowEnd
             self.inlineStyle = inlineStyle
+            self.minimumRankSpan = minimumRankSpan
         }
     }
 
